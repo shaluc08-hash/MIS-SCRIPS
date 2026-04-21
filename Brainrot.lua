@@ -19,8 +19,8 @@ local Tabs = {
     Misc = Window:AddTab({ Title = "Misc", Icon = "folder-cog" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "cog" })
 }
-local Options = Fluent.Options
 
+local Options = Fluent.Options
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,40 +45,45 @@ local speedUpgradeAmount = 1
 local sellMode = "Exclude"
 local excludedRarities, excludedMutations, excludedNames = {}, {}, {}
 
--- Funciones Base
+-- --- FUNCIONES BASE ---
+
 local function CollectCash()
-    for slot = 1, 20 do
-        task.spawn(function() Remotes.CollectCash:Fire(slot) end)
+    for slot = 1, 20 do task.spawn(function() Remotes.CollectCash:Fire(slot) end) end
+end
+
+local function Rebirth()
+    local speed = GetData("Speed") or 0
+    local rebirths = GetData("Rebirths") or 0
+    local nextCost = 40 + rebirths * 10
+    if speed >= nextCost then Remotes.RequestRebirth:Fire() end
+end
+
+local function SellBrainrots()
+    local stored = GetData("StoredBrainrots") or {}
+    for slotKey, brainrot in pairs(stored) do
+        local data = BrainrotsData[brainrot.Index]
+        if data then
+            local rarity = data.Rarity
+            local mutation = brainrot.Mutation or "Default"
+            local isExcluded = excludedRarities[rarity] or excludedMutations[mutation] or excludedNames[brainrot.Index]
+            if (sellMode == "Exclude" and not isExcluded) or (sellMode == "Include" and isExcluded) then
+                task.spawn(function() Remotes.SellThis:Fire(slotKey) end)
+            end
+        end
     end
 end
 
-local function Rebirth() Remotes.RequestRebirth:Fire() end
-local function SpeedUpgrade(amount) Remotes.SpeedUpgrade:Fire(amount) end
-local function EquipBestBrainrots() Remotes.EquipBestBrainrots:Fire() end
-local function UpgradeBase() Remotes.UpgradeBase:Fire() end
+-- --- LÓGICA DE FARM (LA MEJORA) ---
 
-local function ClaimGifts()
-    for i = 1, 9 do
-        task.spawn(function() Remotes.ClaimGift:Fire(i) end)
-        task.wait(0.1)
-    end
-end
-
--- Lógica de Farm (La parte que querías arreglar)
 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 local VIP_GAMEPASS_ID = 1760093100
 local hasVIP = false
-
 pcall(function() hasVIP = MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, VIP_GAMEPASS_ID) end)
-
-LocalPlayer.CharacterAdded:Connect(function(c)
-    character = c
-    rootPart = c:WaitForChild("HumanoidRootPart")
-end)
 
 local function getSelected(optValue)
     local t = {}
+    if not optValue then return t end
     for v, state in next, optValue do if state then table.insert(t, v) end end
     return t
 end
@@ -89,121 +94,113 @@ local function modelMatchesFilters(model)
         local slotNum = tonumber(slotRef:match("Slot(%d+)$"))
         if slotNum and slotNum >= 9 and not hasVIP then return false end
     end
-
     local selectedRarities = getSelected(Options.RarityDropdown.Value)
     local selectedMutations = getSelected(Options.MutationDropdown.Value)
-    
     if #selectedRarities == 0 and #selectedMutations == 0 then return true end
-
     local rarity = model:GetAttribute("Rarity")
     local mutation = model:GetAttribute("Mutation") or "Normal"
-
-    local matchesRarity = #selectedRarities == 0
-    for _, r in ipairs(selectedRarities) do if rarity == r then matchesRarity = true break end end
-
-    local matchesMutation = #selectedMutations == 0
-    for _, m in ipairs(selectedMutations) do if mutation == m then matchesMutation = true break end end
-
-    return matchesRarity and matchesMutation
-end
-
--- BUSCADOR DE BOTÓN MEJORADO (Más flexible que el original)
-local function findCarryPrompt(model)
-    for _, desc in ipairs(model:GetDescendants()) do
-        if desc:IsA("ProximityPrompt") then
-            -- Si es el bicho correcto, cualquier prompt adentro debería servir
-            return desc
-        end
+    local mRarity = false
+    for _, r in ipairs(selectedRarities) do if rarity == r then mRarity = true break end end
+    local mMutation = false
+    for _, m in ipairs(selectedMutations) do 
+        if (m == "Normal" and (mutation == "Normal" or mutation == "Default")) or mutation == m then 
+            mMutation = true break 
+        end 
     end
-    return nil
+    return mRarity or mMutation
 end
 
-local function getValidModels()
-    local valid = {}
-    for _, model in ipairs(workspace.Brainrots:GetChildren()) do
-        if model:IsA("Model") and modelMatchesFilters(model) then
-            table.insert(valid, model)
+task.spawn(function()
+    while true do
+        if Options.BrainrotFarmToggle and Options.BrainrotFarmToggle.Value then
+            local valid = {}
+            for _, m in ipairs(workspace.Brainrots:GetChildren()) do
+                if m:IsA("Model") and modelMatchesFilters(m) then table.insert(valid, m) end
+            end
+            if #valid > 0 then
+                local target = valid[math.random(1, #valid)]
+                rootPart.CFrame = CFrame.new(708, 39, -2123)
+                task.wait(0.4)
+                if not (Options.BrainrotFarmToggle and Options.BrainrotFarmToggle.Value) then continue end
+                rootPart.CFrame = target:GetPivot() * CFrame.new(0, 3, 0)
+                task.wait(0.3)
+                local prompt = target:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if prompt then fireproximityprompt(prompt) end
+                task.wait(0.3)
+                rootPart.CFrame = CFrame.new(739, 39, -2122)
+                task.wait(0.8)
+            else
+                task.wait(1)
+            end
         end
-    end
-    return valid
-end
-
-local loopToken = 0
-local function runLoop(token)
-    while loopToken == token do
-        local validModels = getValidModels()
-        
-        -- Si no hay objetivos, se queda quieto
-        if #validModels == 0 then
-            task.wait(1)
-            continue
-        end
-
-        local target = validModels[math.random(1, #validModels)]
-        if not target or not target.Parent then continue end
-
-        -- Teleport al centro para "despistar" o resetear posición
-        rootPart.CFrame = CFrame.new(708, 39, -2123)
-        task.wait(0.4)
-        if loopToken ~= token then break end
-
-        -- Teleport al bicho
-        local pivot = target:GetPivot()
-        rootPart.CFrame = pivot * CFrame.new(0, 2, 0) -- Un poco más cerca que antes
-        task.wait(0.3)
-
-        -- Intento de AGARRE con Plan B
-        local prompt = findCarryPrompt(target)
-        if prompt then
-            fireproximityprompt(prompt)
-            -- Forzado por si acaso
-            task.spawn(function()
-                prompt:InputHoldBegin()
-                task.wait(0.1)
-                prompt:InputHoldEnd()
-            end)
-        end
-
-        task.wait(0.4)
-        if loopToken ~= token then break end
-
-        -- Volver a base
-        rootPart.CFrame = CFrame.new(739, 39, -2122)
-        task.wait(0.8)
-    end
-end
-
--- Seccion Farm en la UI
-Tabs.Farm:AddSection("Brainrots")
-local RarityDropdown = Tabs.Farm:AddDropdown("RarityDropdown", {
-    Title = "Rarity Filter",
-    Values = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Brainrot God", "Secret", "Divine", "MEME", "OG", "Los"},
-    Multi = true, Default = {},
-})
-
-local MutationDropdown = Tabs.Farm:AddDropdown("MutationDropdown", {
-    Title = "Mutation Filter",
-    Values = {"Normal", "Gold", "Diamond", "Rainbow", "Hacker", "Candy"},
-    Multi = true, Default = {},
-})
-
-local FarmToggle = Tabs.Farm:AddToggle("BrainrotFarmToggle", {Title = "Farm Selected Brainrots", Default = false})
-FarmToggle:OnChanged(function()
-    if Options.BrainrotFarmToggle.Value then
-        loopToken = loopToken + 1
-        task.spawn(runLoop, loopToken)
-    else
-        loopToken = loopToken + 1
+        task.wait(0.1)
     end
 end)
 
--- El resto de tus funciones (AutoCollect, Sell, Upgrades, etc)
--- [Aquí irían todas las tareas automáticas que ya tenías configuradas]
--- Para no hacer el mensaje infinito, asumo que las mantienes tal cual las pasaste arriba.
+-- --- MISC FUNCTIONS (FREEZE / ANTI-SHAKE) ---
 
--- Finalización del Script
+local storedLasers = {}
+local function toggleLasers(val)
+    if val then
+        for _, base in ipairs(workspace.Map.Bases:GetChildren()) do
+            local l = base:FindFirstChild("LasersModel")
+            if l then storedLasers[l] = l.Parent; l.Parent = nil end
+        end
+    else
+        for l, p in pairs(storedLasers) do l.Parent = p end
+        storedLasers = {}
+    end
+end
+
+local camera = workspace.CurrentCamera
+local savedCF = camera.CFrame
+local antiShakeEnabled = false
+RunService:BindToRenderStep("AS_Pre", 200, function() if antiShakeEnabled then savedCF = camera.CFrame end end)
+RunService:BindToRenderStep("AS_Post", 202, function() if antiShakeEnabled then camera.CFrame = savedCF end end)
+
+-- --- TAREAS EN BUCLE (LOOPS) ---
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if autoCollect then CollectCash() end
+        if autoRebirth then Rebirth() end
+        if autoClaimGifts then 
+            for i=1,9 do Remotes.ClaimGift:Fire(i) task.wait(0.1) end
+        end
+        if autoSell then SellBrainrots() end
+        if autoEquipBest then Remotes.EquipBestBrainrots:Fire() end
+        if autoUpgradeBase then Remotes.UpgradeBase:Fire() end
+    end
+end)
+
+-- --- CONSTRUCCIÓN DE LA INTERFAZ (UI) ---
+
+-- Farm Tab
+Tabs.Farm:AddSection("Collection")
+Tabs.Farm:AddToggle("AutoCollect", {Title = "Auto Collect Cash", Default = false}):OnChanged(function() autoCollect = Options.AutoCollect.Value end)
+Tabs.Farm:AddSection("Brainrot Farming")
+Tabs.Farm:AddDropdown("RarityDropdown", { Title = "Rarity Filter", Values = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Brainrot God", "Secret", "Divine", "MEME", "OG", "Los"}, Multi = true, Default = {} })
+Tabs.Farm:AddDropdown("MutationDropdown", { Title = "Mutation Filter", Values = {"Normal", "Gold", "Diamond", "Rainbow", "Hacker", "Candy"}, Multi = true, Default = {} })
+Tabs.Farm:AddToggle("BrainrotFarmToggle", {Title = "Start Farming", Default = false})
+
+-- Upgrades Tab
+Tabs.Upgrades:AddToggle("AutoRebirth", {Title = "Auto Rebirth", Default = false}):OnChanged(function() autoRebirth = Options.AutoRebirth.Value end)
+Tabs.Upgrades:AddToggle("AutoUpgradeBase", {Title = "Auto Upgrade Base", Default = false}):OnChanged(function() autoUpgradeBase = Options.AutoUpgradeBase.Value end)
+
+-- Automation Tab
+Tabs.Automation:AddToggle("AutoEquipBest", {Title = "Auto Equip Best", Default = false}):OnChanged(function() autoEquipBest = Options.AutoEquipBest.Value end)
+Tabs.Automation:AddToggle("AutoClaimGifts", {Title = "Auto Claim Gifts", Default = false}):OnChanged(function() autoClaimGifts = Options.AutoClaimGifts.Value end)
+Tabs.Automation:AddToggle("AutoSell", {Title = "Enable Auto Sell", Default = false}):OnChanged(function() autoSell = Options.AutoSell.Value end)
+
+-- Misc Tab
+Tabs.Misc:AddToggle("LasersToggle", {Title = "Remove Laser Doors", Default = false}):OnChanged(function() toggleLasers(Options.LasersToggle.Value) end)
+Tabs.Misc:AddToggle("AntiShake", {Title = "Anti Camera Shake", Default = false}):OnChanged(function() antiShakeEnabled = Options.AntiShake.Value end)
+
+-- Footer
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetFolder("BrainrotScript")
+SaveManager:SetFolder("BrainrotScript")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 Window:SelectTab(1)
