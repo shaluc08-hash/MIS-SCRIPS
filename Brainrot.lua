@@ -685,73 +685,84 @@ end
 
 local function runLoop(token)
     while loopToken == token do
+        -- 1. BUSCAR: Si no hay nada que coincida, esperamos acá quietos.
         local validModels = getValidModels()
-        
         if #validModels == 0 then
             task.wait(1)
-            continue 
+            continue -- Reinicia el bucle sin transportarse a ningún lado
         end
 
-        -- Si hay modelos válidos, procedemos
+        -- 2. INICIO: Si encontró algo, va al punto de partida (como el original)
         rootPart.CFrame = CFrame.new(708, 39, -2123)
         task.wait(0.5)
-        
-        -- Volvemos a filtrar para estar seguros
-        validModels = getValidModels() 
-        if #validModels > 0 then
-            local target = validModels[math.random(1, #validModels)]
-            if target and target.Parent then
-                local pivot = target:GetPivot()
-                rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
-                
-                -- RECOLECCIÓN SEGURA
-                task.wait(0.2) -- Un pequeño delay para que el prompt sea "detectable"
-                local prompt = findCarryPrompt(target)
-                if prompt then
-                    -- Aseguramos que el prompt sea habilitado y visible antes de disparar
-                    prompt.Enabled = true
-                    fireproximityprompt(prompt)
-                else
-                    warn("No se encontró el botón de recogida en: " .. target.Name)
-                end
-                
-                task.wait(0.4)
-                rootPart.CFrame = CFrame.new(739, 39, -2122) 
-                task.wait(0.9)
+        if loopToken ~= token then break end
+
+        -- 3. RE-CHECK Y TELEPORT AL BRAINROT:
+        -- Buscamos de nuevo por si el que vimos antes ya no está
+        validModels = getValidModels()
+        local target = validModels[math.random(1, #validModels)]
+
+        if target and target.Parent then
+            local pivot = target:GetPivot()
+            rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
+            task.wait(0.3)
+            
+            if loopToken ~= token then break end
+
+            -- 4. RECOGER (La parte que fallaba):
+            local prompt = findCarryPrompt(target)
+            if prompt then
+                fireproximityprompt(prompt)
             end
+            task.wait(0.3)
+
+            -- 5. ENTREGA (Fundamental): El transporte al punto final
+            rootPart.CFrame = CFrame.new(739, 39, -2122)
+            task.wait(0.9) -- Espera para que el juego procese la entrega
         end
         
-        if loopToken ~= token then break end
         task.wait(0.1)
     end
 end
 local function runLoop(token)
     while loopToken == token do
+        -- 1. BUSCAR: Si no hay nada que coincida, esperamos acá quietos.
+        local validModels = getValidModels()
+        if #validModels == 0 then
+            task.wait(1)
+            continue -- Reinicia el bucle sin transportarse a ningún lado
+        end
+
+        -- 2. INICIO: Si encontró algo, va al punto de partida (como el original)
         rootPart.CFrame = CFrame.new(708, 39, -2123)
         task.wait(0.5)
         if loopToken ~= token then break end
-        local validModels = getValidModels()
-        if #validModels == 0 then
-            task.wait(0.9)
-            continue
-        end
+
+        -- 3. RE-CHECK Y TELEPORT AL BRAINROT:
+        -- Buscamos de nuevo por si el que vimos antes ya no está
+        validModels = getValidModels()
         local target = validModels[math.random(1, #validModels)]
-        if not target or not target.Parent then
-            task.wait(0.2)
-            continue
+
+        if target and target.Parent then
+            local pivot = target:GetPivot()
+            rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
+            task.wait(0.3)
+            
+            if loopToken ~= token then break end
+
+            -- 4. RECOGER (La parte que fallaba):
+            local prompt = findCarryPrompt(target)
+            if prompt then
+                fireproximityprompt(prompt)
+            end
+            task.wait(0.3)
+
+            -- 5. ENTREGA (Fundamental): El transporte al punto final
+            rootPart.CFrame = CFrame.new(739, 39, -2122)
+            task.wait(0.9) -- Espera para que el juego procese la entrega
         end
-        local pivot = target:GetPivot()
-        rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
-        task.wait(0.3)
-        if loopToken ~= token then break end
-        local prompt = findCarryPrompt(target)
-        if prompt then
-            fireproximityprompt(prompt)
-        end
-        task.wait(0.3)
-        if loopToken ~= token then break end
-        rootPart.CFrame = CFrame.new(739, 39, -2122)
-        task.wait(0.9)
+        
+        task.wait(0.1)
     end
 end
 local Toggle = Tabs.Farm:AddToggle("BrainrotFarmToggle", {Title = "Farm Selected Brainrots", Default = false})
