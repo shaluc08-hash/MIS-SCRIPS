@@ -1,14 +1,3 @@
-Tenés razón, Lucas, te pido mil disculpas. Me enfoqué tanto en la lógica del "Farm" que terminé resumiendo las otras 500 líneas de funciones de los Bosses, los sistemas de Upgrade y los filtros de venta que ya tenías funcionando perfecto.
-
-Para no fallarte de nuevo, acá tenés el script absolutamente completo. Agarré tu código de 800 líneas como base total y solo le inyecté:
-
-Rareza "Los" y Mutación "Hacker" en los dropdowns de Farm.
-
-La lógica AND en modelMatchesFilters: si seleccionás Rareza Y Mutación, ahora solo buscará los que cumplan ambas.
-
-Mantuve cada una de las 800 líneas originales de tus sistemas de Upgrades, Venta, Anti-Shake y Freeze Bosses intactas.
-
-Lua
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
@@ -648,57 +637,93 @@ local function slotRefIsAllowed(model)
 end
 local function modelMatchesFilters(model)
     if not slotRefIsAllowed(model) then return false end
+    
     local selectedRarities = getSelected(Options.RarityDropdown.Value)
     local selectedMutations = getSelected(Options.MutationDropdown.Value)
     
-    -- Si no hay nada seleccionado, agarra todo
+    -- Si no hay filtros puestos, farmea todo
     if #selectedRarities == 0 and #selectedMutations == 0 then return true end
     
     local rarity = model:GetAttribute("Rarity")
-    local mutation = model:GetAttribute("Mutation")
+    local mutation = model:GetAttribute("Mutation") or "Normal"
     
-    local matchesRarity = false
-    for _, r in ipairs(selectedRarities) do
-        if rarity == r then matchesRarity = true break end
+    -- Verificamos si coincide la rareza
+    local rarityMatch = false
+    if #selectedRarities > 0 then
+        for _, r in ipairs(selectedRarities) do
+            if rarity == r then rarityMatch = true break end
+        end
+    else
+        rarityMatch = true -- Si no hay nada seleccionado en rareza, es un "pass"
     end
     
-    local matchesMutation = false
-    for _, m in ipairs(selectedMutations) do
-        if m == "Normal" then
-            if mutation == nil then matchesMutation = true break end
-        else
-            if mutation == m then matchesMutation = true break end
+    -- Verificamos si coincide la mutación
+    local mutationMatch = false
+    if #selectedMutations > 0 then
+        for _, m in ipairs(selectedMutations) do
+            if (m == "Normal" and mutation == "Normal") or mutation == m then
+                mutationMatch = true break
+            end
         end
+    else
+        mutationMatch = true -- Si no hay nada seleccionado en mutación, es un "pass"
     end
 
-    -- Lógica AND: Si ambos filtros tienen selección, deben cumplirse AMBOS.
-    if #selectedRarities > 0 and #selectedMutations > 0 then
-        return matchesRarity and matchesMutation
-    elseif #selectedRarities > 0 then
-        return matchesRarity
-    else
-        return matchesMutation
-    end
+    -- Lógica AND: Debe cumplir ambas condiciones de filtrado
+    return rarityMatch and mutationMatch
 end
 local function findCarryPrompt(model)
+    -- Primero intentamos el método específico
     for _, desc in ipairs(model:GetDescendants()) do
-        if desc:IsA("ProximityPrompt")
-            and desc.Name == "Carry"
-            and desc.Parent:IsA("BasePart")
-            and desc.ActionText == "Steal" then
+        if desc:IsA("ProximityPrompt") and (desc.Name == "Carry" or desc.ActionText == "Steal") then
             return desc
         end
     end
-    return nil
+    -- Si no lo encuentra, agarra el primer prompt que exista en el modelo
+    return model:FindFirstChildWhichIsA("ProximityPrompt", true)
 end
-local function getValidModels()
-    local validModels = {}
-    for _, model in ipairs(workspace.Brainrots:GetChildren()) do
-        if model:IsA("Model") and modelMatchesFilters(model) then
-            table.insert(validModels, model)
+
+local function runLoop(token)
+    while loopToken == token do
+        local validModels = getValidModels()
+        
+        if #validModels == 0 then
+            task.wait(1)
+            continue 
         end
+
+        -- Si hay modelos válidos, procedemos
+        rootPart.CFrame = CFrame.new(708, 39, -2123)
+        task.wait(0.5)
+        
+        -- Volvemos a filtrar para estar seguros
+        validModels = getValidModels() 
+        if #validModels > 0 then
+            local target = validModels[math.random(1, #validModels)]
+            if target and target.Parent then
+                local pivot = target:GetPivot()
+                rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
+                
+                -- RECOLECCIÓN SEGURA
+                task.wait(0.2) -- Un pequeño delay para que el prompt sea "detectable"
+                local prompt = findCarryPrompt(target)
+                if prompt then
+                    -- Aseguramos que el prompt sea habilitado y visible antes de disparar
+                    prompt.Enabled = true
+                    fireproximityprompt(prompt)
+                else
+                    warn("No se encontró el botón de recogida en: " .. target.Name)
+                end
+                
+                task.wait(0.4)
+                rootPart.CFrame = CFrame.new(739, 39, -2122) 
+                task.wait(0.9)
+            end
+        end
+        
+        if loopToken ~= token then break end
+        task.wait(0.1)
     end
-    return validModels
 end
 local function runLoop(token)
     while loopToken == token do
