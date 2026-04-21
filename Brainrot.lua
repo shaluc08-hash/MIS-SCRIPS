@@ -688,29 +688,45 @@ local function getValidModels()
 end
 local function runLoop(token)
     while loopToken == token do
-        rootPart.CFrame = CFrame.new(708, 39, -2123)
-        task.wait(0.5)
-        if loopToken ~= token then break end
+        -- 1. Primero buscamos si hay algo que cumpla tus filtros
         local validModels = getValidModels()
+        
+        -- 2. Si NO hay nada que coincida, esperamos un segundo y repetimos el ciclo
+        -- Esto hace que te quedes quieto en el lugar donde estés parado
         if #validModels == 0 then
-            task.wait(0.9)
+            task.wait(1) 
             continue
         end
+        
+        -- 3. Si encontramos algo, RECIÉN AHÍ empezamos la secuencia de movimiento
         local target = validModels[math.random(1, #validModels)]
         if not target or not target.Parent then
             task.wait(0.2)
             continue
         end
+
+        -- Teleport al centro de recolección
+        rootPart.CFrame = CFrame.new(708, 39, -2123)
+        task.wait(0.4)
+        if loopToken ~= token then break end
+
+        -- Teleport exacto sobre el bicho
         local pivot = target:GetPivot()
         rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
         task.wait(0.3)
+        
         if loopToken ~= token then break end
+        
+        -- Intentar agarrar
         local prompt = findCarryPrompt(target)
         if prompt then
             fireproximityprompt(prompt)
         end
+        
         task.wait(0.3)
         if loopToken ~= token then break end
+        
+        -- Volver a la base (Asegúrate que estas sean tus coordenadas de base)
         rootPart.CFrame = CFrame.new(739, 39, -2122)
         task.wait(0.9)
     end
