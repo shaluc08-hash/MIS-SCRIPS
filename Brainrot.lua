@@ -637,132 +637,70 @@ local function slotRefIsAllowed(model)
 end
 local function modelMatchesFilters(model)
     if not slotRefIsAllowed(model) then return false end
-    
     local selectedRarities = getSelected(Options.RarityDropdown.Value)
     local selectedMutations = getSelected(Options.MutationDropdown.Value)
-    
-    -- Si no hay filtros puestos, farmea todo
     if #selectedRarities == 0 and #selectedMutations == 0 then return true end
-    
     local rarity = model:GetAttribute("Rarity")
-    local mutation = model:GetAttribute("Mutation") or "Normal"
-    
-    -- Verificamos si coincide la rareza
-    local rarityMatch = false
-    if #selectedRarities > 0 then
-        for _, r in ipairs(selectedRarities) do
-            if rarity == r then rarityMatch = true break end
-        end
-    else
-        rarityMatch = true -- Si no hay nada seleccionado en rareza, es un "pass"
+    local mutation = model:GetAttribute("Mutation")
+    for _, r in ipairs(selectedRarities) do
+        if rarity == r then return true end
     end
-    
-    -- Verificamos si coincide la mutación
-    local mutationMatch = false
-    if #selectedMutations > 0 then
-        for _, m in ipairs(selectedMutations) do
-            if (m == "Normal" and mutation == "Normal") or mutation == m then
-                mutationMatch = true break
-            end
+    for _, m in ipairs(selectedMutations) do
+        if m == "Normal" then
+            if mutation == nil then return true end
+        else
+            if mutation == m then return true end
         end
-    else
-        mutationMatch = true -- Si no hay nada seleccionado en mutación, es un "pass"
     end
-
-    -- Lógica AND: Debe cumplir ambas condiciones de filtrado
-    return rarityMatch and mutationMatch
+    return false
 end
 local function findCarryPrompt(model)
-    -- Primero intentamos el método específico
     for _, desc in ipairs(model:GetDescendants()) do
-        if desc:IsA("ProximityPrompt") and (desc.Name == "Carry" or desc.ActionText == "Steal") then
+        if desc:IsA("ProximityPrompt")
+            and desc.Name == "Carry"
+            and desc.Parent:IsA("BasePart")
+            and desc.ActionText == "Steal" then
             return desc
         end
     end
-    -- Si no lo encuentra, agarra el primer prompt que exista en el modelo
-    return model:FindFirstChildWhichIsA("ProximityPrompt", true)
+    return nil
 end
-
-local function runLoop(token)
-    while loopToken == token do
-        -- 1. BUSCAR: Si no hay nada que coincida, esperamos acá quietos.
-        local validModels = getValidModels()
-        if #validModels == 0 then
-            task.wait(1)
-            continue -- Reinicia el bucle sin transportarse a ningún lado
+local function getValidModels()
+    local validModels = {}
+    for _, model in ipairs(workspace.Brainrots:GetChildren()) do
+        if model:IsA("Model") and modelMatchesFilters(model) then
+            table.insert(validModels, model)
         end
-
-        -- 2. INICIO: Si encontró algo, va al punto de partida (como el original)
-        rootPart.CFrame = CFrame.new(708, 39, -2123)
-        task.wait(0.5)
-        if loopToken ~= token then break end
-
-        -- 3. RE-CHECK Y TELEPORT AL BRAINROT:
-        -- Buscamos de nuevo por si el que vimos antes ya no está
-        validModels = getValidModels()
-        local target = validModels[math.random(1, #validModels)]
-
-        if target and target.Parent then
-            local pivot = target:GetPivot()
-            rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
-            task.wait(0.3)
-            
-            if loopToken ~= token then break end
-
-            -- 4. RECOGER (La parte que fallaba):
-            local prompt = findCarryPrompt(target)
-            if prompt then
-                fireproximityprompt(prompt)
-            end
-            task.wait(0.3)
-
-            -- 5. ENTREGA (Fundamental): El transporte al punto final
-            rootPart.CFrame = CFrame.new(739, 39, -2122)
-            task.wait(0.9) -- Espera para que el juego procese la entrega
-        end
-        
-        task.wait(0.1)
     end
+    return validModels
 end
 local function runLoop(token)
     while loopToken == token do
-        -- 1. BUSCAR: Si no hay nada que coincida, esperamos acá quietos.
-        local validModels = getValidModels()
-        if #validModels == 0 then
-            task.wait(1)
-            continue -- Reinicia el bucle sin transportarse a ningún lado
-        end
-
-        -- 2. INICIO: Si encontró algo, va al punto de partida (como el original)
         rootPart.CFrame = CFrame.new(708, 39, -2123)
         task.wait(0.5)
         if loopToken ~= token then break end
-
-        -- 3. RE-CHECK Y TELEPORT AL BRAINROT:
-        -- Buscamos de nuevo por si el que vimos antes ya no está
-        validModels = getValidModels()
-        local target = validModels[math.random(1, #validModels)]
-
-        if target and target.Parent then
-            local pivot = target:GetPivot()
-            rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
-            task.wait(0.3)
-            
-            if loopToken ~= token then break end
-
-            -- 4. RECOGER (La parte que fallaba):
-            local prompt = findCarryPrompt(target)
-            if prompt then
-                fireproximityprompt(prompt)
-            end
-            task.wait(0.3)
-
-            -- 5. ENTREGA (Fundamental): El transporte al punto final
-            rootPart.CFrame = CFrame.new(739, 39, -2122)
-            task.wait(0.9) -- Espera para que el juego procese la entrega
+        local validModels = getValidModels()
+        if #validModels == 0 then
+            task.wait(0.9)
+            continue
         end
-        
-        task.wait(0.1)
+        local target = validModels[math.random(1, #validModels)]
+        if not target or not target.Parent then
+            task.wait(0.2)
+            continue
+        end
+        local pivot = target:GetPivot()
+        rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
+        task.wait(0.3)
+        if loopToken ~= token then break end
+        local prompt = findCarryPrompt(target)
+        if prompt then
+            fireproximityprompt(prompt)
+        end
+        task.wait(0.3)
+        if loopToken ~= token then break end
+        rootPart.CFrame = CFrame.new(739, 39, -2122)
+        task.wait(0.9)
     end
 end
 local Toggle = Tabs.Farm:AddToggle("BrainrotFarmToggle", {Title = "Farm Selected Brainrots", Default = false})
