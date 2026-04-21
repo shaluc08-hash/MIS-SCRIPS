@@ -718,10 +718,10 @@ local function runLoop(token)
         if loopToken ~= token then break end
         
         -- Intentar agarrar
-        local prompt = findCarryPrompt(target)
-        if prompt then
-            fireproximityprompt(prompt)
-        end
+        local function findCarryPrompt(model)
+    -- Esto busca el botón de agarrar dentro del bicho
+    return model:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
         
         task.wait(0.3)
         if loopToken ~= token then break end
