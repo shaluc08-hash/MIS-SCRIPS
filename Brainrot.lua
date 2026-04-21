@@ -637,33 +637,45 @@ local function slotRefIsAllowed(model)
 end
 local function modelMatchesFilters(model)
     if not slotRefIsAllowed(model) then return false end
+    
     local selectedRarities = getSelected(Options.RarityDropdown.Value)
     local selectedMutations = getSelected(Options.MutationDropdown.Value)
+    
+    -- Si no hay nada seleccionado, farmea todo (comportamiento original)
     if #selectedRarities == 0 and #selectedMutations == 0 then return true end
+    
     local rarity = model:GetAttribute("Rarity")
-    local mutation = model:GetAttribute("Mutation")
-    for _, r in ipairs(selectedRarities) do
-        if rarity == r then return true end
-    end
-    for _, m in ipairs(selectedMutations) do
-        if m == "Normal" then
-            if mutation == nil then return true end
-        else
-            if mutation == m then return true end
+    local mutation = model:GetAttribute("Mutation") or "Normal"
+    
+    local matchesRarity = false
+    local matchesMutation = false
+
+    -- 1. Verificar si coincide con la Rareza seleccionada
+    if #selectedRarities > 0 then
+        for _, r in ipairs(selectedRarities) do
+            if rarity == r then
+                matchesRarity = true
+                break
+            end
         end
+    else
+        matchesRarity = true -- Si no filtraste por rareza, cuenta como que "coincide"
     end
-    return false
-end
-local function findCarryPrompt(model)
-    for _, desc in ipairs(model:GetDescendants()) do
-        if desc:IsA("ProximityPrompt")
-            and desc.Name == "Carry"
-            and desc.Parent:IsA("BasePart")
-            and desc.ActionText == "Steal" then
-            return desc
+
+    -- 2. Verificar si coincide con la Mutación seleccionada
+    if #selectedMutations > 0 then
+        for _, m in ipairs(selectedMutations) do
+            if mutation == m then
+                matchesMutation = true
+                break
+            end
         end
+    else
+        matchesMutation = true -- Si no filtraste por mutación, cuenta como que "coincide"
     end
-    return nil
+
+    -- SOLO si coincide con AMBOS filtros (o si uno está vacío) lo devuelve como verdadero
+    return matchesRarity and matchesMutation
 end
 local function getValidModels()
     local validModels = {}
